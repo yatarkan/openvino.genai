@@ -75,7 +75,7 @@ install(TARGETS ${TARGET_NAME}
     RUNTIME DESTINATION python/openvino_genai/ COMPONENT pygenai_${Python_VERSION_MAJOR}_${Python_VERSION_MINOR})
 
 # Copy libcore_tokenizers.so to build_dir/openvino_tokenizers/src/
-if(NOT MSVC)
+if(NOT MSVC AND NOT APPLE)
     add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
         COMMAND "${CMAKE_COMMAND}" -E copy
             "${CMAKE_BINARY_DIR}/_deps/fast_tokenizer-src/lib/libcore_tokenizers.so"
