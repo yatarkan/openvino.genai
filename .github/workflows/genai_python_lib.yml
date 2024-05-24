@@ -36,6 +36,37 @@ jobs:
           done
           python -m pytest test_generate_api.py
 
+  macos_genai_python_lib:
+    runs-on: macos-12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v4
+        with:
+          python-version: 3.8
+      - run: mkdir ./ov/
+      - run: curl https://storage.openvinotoolkit.org/repositories/openvino/packages/nightly/2024.2.0-15484-4b8641ee3f4/m_openvino_toolkit_macos_12_6_2024.2.0.dev20240523_x86_64.tgz | tar --directory ./ov/ --strip-components 1 -xz
+      - run: brew install coreutils ninja scons
+      - run: source ./ov/setupvars.sh && cmake -DCMAKE_BUILD_TYPE=Release -S ./ -B ./build/
+      - run: source ./ov/setupvars.sh && cmake --build ./build/ --config Release -j
+      # GitHub Actions already provides what is listed in ./requirements-build.txt but the internal
+      # build system doesn't. Install ./requirements-build.txt to detect possible conflicts.
+      - run: source ./ov/setupvars.sh && python -m pip install ./thirdparty/openvino_tokenizers/[transformers] -r ./requirements-build.txt
+      - run: PYTHONPATH=./src/python/ python -c "from openvino_genai import LLMPipeline"
+      - run: source ./ov/setupvars.sh && CMAKE_BUILD_PARALLEL_LEVEL="" python -m pip install --pre . --extra-index-url https://storage.openvinotoolkit.org/simple/wheels/nightly
+      - run: python -c "from openvino_genai import LLMPipeline"
+      - name: GenAI Python API tests
+        run: |
+          source ./ov/setupvars.sh
+          cd ./tests/python_tests/
+          python -m pip install -r requirements.txt
+          models=$(python list_test_models.py)
+          echo "$models" | while read -r model_name model_path; do
+              optimum-cli export openvino --trust-remote-code --weight-format fp16 --model "$model_name" "$model_path"
+          done
+          python -m pytest test_generate_api.py
+
   windows_genai_python_lib:
     runs-on: windows-latest
     defaults:
