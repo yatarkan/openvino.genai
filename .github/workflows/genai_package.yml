@@ -47,6 +47,7 @@ jobs:
           python-version: 3.8
       - run: mkdir ./ov/
       - run: curl https://storage.openvinotoolkit.org/repositories/openvino/packages/2024.1/linux/l_openvino_toolkit_ubuntu20_2024.1.0.15008.f4afc983258_x86_64.tgz | tar --directory ./ov/ --strip-components 1 -xz
+      - run: brew install coreutils ninja scons
       - run: source ./ov/setupvars.sh && cmake -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} -S ./ -B ./build/
       - run: source ./ov/setupvars.sh && cmake --build ./build/ --config ${{ matrix.build-type }} --target package -j
       - run: source ./ov/setupvars.sh && cmake --install ./build/ --config ${{ matrix.build-type }} --prefix ov
