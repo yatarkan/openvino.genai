@@ -13,8 +13,8 @@ FetchContent_MakeAvailable(nlohmann_json)
 
 function(ov_genai_build_jinja2cpp)
     FetchContent_Declare(jinja2cpp
-        URL https://github.com/ilya-lavrenov/Jinja2Cpp/archive/5433af6b225cd35df700023cf60df4acdd6cbcf3.tar.gz
-        URL_HASH SHA256=b90f6c44908beaacae8eeb2690d11a6ebb183b4560434698ac00017e7bc07d11)
+        URL https://github.com/jinja2cpp/Jinja2Cpp/archive/9ae7e1fc45d707e1686dd425a154d30963801944.tar.gz
+        URL_HASH SHA256=aa41ae425225623ba91be5de3ef1e0d942e682d519311e6235b04b4e7d880e01)
 
     FetchContent_GetProperties(jinja2cpp)
     if(NOT jinja2cpp_POPULATED)
@@ -30,11 +30,6 @@ function(ov_genai_build_jinja2cpp)
         set(JINJA2CPP_PIC ON CACHE BOOL "")
 
         add_subdirectory("${jinja2cpp_SOURCE_DIR}" "${jinja2cpp_BINARY_DIR}" EXCLUDE_FROM_ALL)
-        # openvino::runtime exports _GLIBCXX_USE_CXX11_ABI=0 on CentOS7.
-        # It needs to be propagated to every library GenAI links with.
-        # It's enough to propagate to fmt, because fmt propagates to
-        # jinja2cpp.
-        target_compile_definitions(fmt PUBLIC $<TARGET_PROPERTY:openvino::runtime,INTERFACE_COMPILE_DEFINITIONS>)
     endif()
 endfunction()
 
@@ -46,42 +41,30 @@ file(GLOB SOURCE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
 
 set(TARGET_NAME genai)
 add_library(${TARGET_NAME} SHARED ${SOURCE_FILES})
-add_library(openvino::${TARGET_NAME} ALIAS ${TARGET_NAME})
+add_library(openvino::genai ALIAS ${TARGET_NAME})
 
 target_include_directories(${TARGET_NAME}
     PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>" "$<INSTALL_INTERFACE:runtime/include>")
 
 target_link_libraries(${TARGET_NAME} PUBLIC openvino::runtime PRIVATE nlohmann_json::nlohmann_json jinja2cpp)
 
-target_compile_definitions(${TARGET_NAME} PRIVATE OPENVINO_TOKENIZERS_PATH=\"$<TARGET_FILE:openvino_tokenizers>\")
-
 target_compile_features(${TARGET_NAME} PUBLIC cxx_std_17)
 
+# Extract two last digits from CMAKE_PROJECT_VERSION_MAJOR because SOVERSION can only contain up to 4 symbols.
+string(REGEX MATCH [=[[0-9][0-9]$]=] MAJOR_SUFFIX ${CMAKE_PROJECT_VERSION_MAJOR})
 set_target_properties(${TARGET_NAME} PROPERTIES
+    OUTPUT_NAME openvino_genai
     VERSION ${CMAKE_PROJECT_VERSION}
-    SOVERSION ${CMAKE_PROJECT_VERSION_MAJOR}
+    SOVERSION ${MAJOR_SUFFIX}${CMAKE_PROJECT_VERSION_MINOR}${CMAKE_PROJECT_VERSION_PATCH}
+    ARCHIVE_OUTPUT_DIRECTORY "$<1:${CMAKE_BINARY_DIR}/openvino_genai/>"
+    LIBRARY_OUTPUT_DIRECTORY "$<1:${CMAKE_BINARY_DIR}/openvino_genai/>"
+    RUNTIME_OUTPUT_DIRECTORY "$<1:${CMAKE_BINARY_DIR}/openvino_genai/>"
 )
-
-# Copy the library to python to allow skipping wheel installation
-add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
-    COMMAND "${CMAKE_COMMAND}" -E copy
-        "$<TARGET_FILE:${TARGET_NAME}>"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../python/openvino_genai/$<TARGET_FILE_NAME:${TARGET_NAME}>"
-    COMMENT "Copy ${TARGET_NAME} to src/python/openvino_genai")
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 install(TARGETS ${TARGET_NAME}
     LIBRARY DESTINATION python/openvino_genai/ COMPONENT pygenai_${Python_VERSION_MAJOR}_${Python_VERSION_MINOR}
     RUNTIME DESTINATION python/openvino_genai/ COMPONENT pygenai_${Python_VERSION_MAJOR}_${Python_VERSION_MINOR})
-
-# Copy libcore_tokenizers.so to build_dir/openvino_tokenizers/src/
-if(NOT MSVC AND NOT APPLE)
-    add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
-        COMMAND "${CMAKE_COMMAND}" -E copy
-            "${CMAKE_BINARY_DIR}/_deps/fast_tokenizer-src/lib/libcore_tokenizers.so"
-            "${CMAKE_BINARY_DIR}/openvino_tokenizers/src/"
-        COMMENT "Copy libcore_tokenizers.so to build_dir/openvino_tokenizers/src/")
-endif()
 
 # - Windows: `<openvino_dir>\runtime\bin\intel64\Release\`
 # - MacOS_x86: `<openvino_dir>/runtime/lib/intel64/Release`
