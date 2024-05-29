@@ -49,7 +49,7 @@ jobs:
         with:
           python-version: 3.8
       - run: mkdir ./ov/
-      - run: curl https://storage.openvinotoolkit.org/repositories/openvino/packages/nightly/2024.2.0-15484-4b8641ee3f4/m_openvino_toolkit_macos_12_6_2024.2.0.dev20240523_x86_64.tgz | tar --directory ./ov/ --strip-components 1 -xz
+      - run: curl https://storage.openvinotoolkit.org/repositories/openvino/packages/pre-release/2024.2.0rc1/macos/m_openvino_toolkit_macos_12_6_2024.2.0.dev20240524_x86_64.tgz | tar --directory ./ov/ --strip-components 1 -xz
       - run: brew install coreutils ninja scons
       - run: source ./ov/setupvars.sh && cmake -DCMAKE_BUILD_TYPE=Release -S ./ -B ./build/
       - run: source ./ov/setupvars.sh && cmake --build ./build/ --config Release -j
