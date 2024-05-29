@@ -41,6 +41,8 @@ jobs:
 
   macos_genai_python_lib:
     runs-on: macos-12
+    env:
+      CMAKE_GENERATOR: Unix Makefiles
     steps:
       - uses: actions/checkout@v4
         with:
