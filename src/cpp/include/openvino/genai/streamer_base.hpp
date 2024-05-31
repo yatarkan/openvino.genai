@@ -15,16 +15,14 @@ namespace genai {
 */
 class StreamerBase {
 public:
-    Tokenizer m_tokenizer;
-    explicit StreamerBase(Tokenizer tokenizer): m_tokenizer(tokenizer) {}
-    StreamerBase() = default;
-    
-    /// @brief put is called every time new token is decoded
-    virtual void put(int64_t token) = 0;
+    /// @brief put is called every time new token is decoded,
+    /// @return bool flag to indicate whether generation should be stoped, if return true generation stops
+    virtual bool put(int64_t token) = 0;
     
     /// @brief end is called at the end of generation. It can be used to flush cache if your own streamer has one
     virtual void end() = 0;
 };
+
 
 }  // namespace genai
 }  // namespace ov

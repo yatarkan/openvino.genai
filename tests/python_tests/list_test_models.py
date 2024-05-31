@@ -1,6 +1,8 @@
 def models_list():
     model_ids = [
         ("TinyLlama/TinyLlama-1.1B-Chat-v1.0", "TinyLlama-1.1B-Chat-v1.0"),
+        # ("microsoft/phi-1_5", "phi-1_5/"),
+
         # ("google/gemma-2b-it", "gemma-2b-it"),
         # ("google/gemma-7b-it", "gemma-7b-it"),
         # ("meta-llama/Llama-2-7b-chat-hf", "Llama-2-7b-chat-hf"),
@@ -9,10 +11,6 @@ def models_list():
         # ("openlm-research/open_llama_7b", "open_llama_7b"),
         # ("databricks/dolly-v2-3b", "dolly-v2-3b"),
         # ("databricks/dolly-v2-12b", "dolly-v2-12b"),
-        # ("mistralai/Mistral-7B-v0.1", "Mistral-7B-v0.1"),
-        # ("ikala/redpajama-3b-chat", "redpajama-3b-chat"),
-        # ("microsoft/phi-1_5", "phi-1_5/"),
-        # ("Qwen/Qwen1.5-7B-Chat", "Qwen1.5-7B-Chat"),
     ]
     import os
     prefix = os.getenv('GENAI_MODELS_PATH_PREFIX', '')

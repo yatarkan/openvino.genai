@@ -1,25 +1,22 @@
+// Copyright (C) 2023-2024 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
+
 #include "text_callback_streamer.hpp"
 
 namespace ov {
 namespace genai {
 
-TextCallbackStreamer::TextCallbackStreamer(const Tokenizer& tokenizer, std::function<void (std::string)> callback, bool print_eos_token) {
+TextCallbackStreamer::TextCallbackStreamer(const Tokenizer& tokenizer, std::function<bool(std::string)> callback, bool print_eos_token) {
     m_tokenizer = tokenizer;
     m_print_eos_token = print_eos_token;
-    on_decoded_text_callback = callback;
-    m_enabled = true;
+    on_finalized_subword_callback = callback;
 }
 
-TextCallbackStreamer::TextCallbackStreamer(const Tokenizer& tokenizer, bool print_eos_token) {
-    m_tokenizer = tokenizer;
-    m_print_eos_token = print_eos_token;
-}
-
-void TextCallbackStreamer::put(int64_t token) {
+bool TextCallbackStreamer::put(int64_t token) {
     std::stringstream res;
     // do nothing if <eos> token is met and if print_eos_token=false
     if (!m_print_eos_token && token == m_tokenizer.get_eos_token_id())
-        return;
+        return false;
 
     m_tokens_cache.push_back(token);
     std::string text = m_tokenizer.decode(m_tokens_cache);
@@ -28,18 +25,15 @@ void TextCallbackStreamer::put(int64_t token) {
         res << std::string_view{text.data() + print_len, text.size() - print_len};
         m_tokens_cache.clear();
         print_len = 0;
-        on_finalized_text(res.str());
-        return;
+        return on_finalized_subword_callback(res.str());
     }
     if (text.size() >= 3 && text.compare(text.size() - 3, 3, "�") == 0) {
         // Don't print incomplete text
-        on_finalized_text(res.str());
-        return;
+        return on_finalized_subword_callback(res.str());
     }
     res << std::string_view{text.data() + print_len, text.size() - print_len} << std::flush;
     print_len = text.size();
-    on_finalized_text(res.str());
-    return;
+    return on_finalized_subword_callback(res.str());
 }
 
 void TextCallbackStreamer::end() {
@@ -48,27 +42,8 @@ void TextCallbackStreamer::end() {
     res << std::string_view{text.data() + print_len, text.size() - print_len} << std::flush;
     m_tokens_cache.clear();
     print_len = 0;
-    on_finalized_text(res.str());
-}
-
-void TextCallbackStreamer::set_tokenizer(Tokenizer tokenizer) {
-    this->m_tokenizer = tokenizer;
-}
-
-void TextCallbackStreamer::set_callback(std::function<void (std::string)> callback) {
-    on_decoded_text_callback = callback;
-    m_enabled = true;
-}
-
-void TextCallbackStreamer::set_callback() {
-    on_decoded_text_callback = [](std::string words){};
-    m_enabled = false;
-}
-
-void TextCallbackStreamer::on_finalized_text(const std::string& subword) {
-    if (m_enabled) {
-        on_decoded_text_callback(subword);
-    }
+    on_finalized_subword_callback(res.str());
+    return;
 }
 
 }  // namespace genai

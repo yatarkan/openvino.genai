@@ -8,7 +8,7 @@
 namespace {
 
 // todo: remove when openvino-tokenizers will support left padding
-std::pair<ov::Tensor, ov::Tensor> pad_left(ov::Tensor&& input_ids, ov::Tensor&& attention_mask, int64_t pad_token) {
+ov::genai::TokenizedInputs pad_left(ov::Tensor&& input_ids, ov::Tensor&& attention_mask, int64_t pad_token_id) {
     const size_t batch_size = input_ids.get_shape()[0];
     const size_t sequence_length = input_ids.get_shape()[1];
     int64_t* inputs_data = input_ids.data<int64_t>();
@@ -18,14 +18,14 @@ std::pair<ov::Tensor, ov::Tensor> pad_left(ov::Tensor&& input_ids, ov::Tensor&& 
         const size_t batch_offset = batch * sequence_length;
 
         // last token in the sequence is not a PAD_TOKEN, skipping
-        if (inputs_data[batch_offset + sequence_length - 1] != pad_token)
+        if (inputs_data[batch_offset + sequence_length - 1] != pad_token_id)
             continue;
 
         size_t pad_tokens_number = 0;
         for (int i = sequence_length - 1; i >= 0; i--) {
             const size_t token_offset = batch_offset + i;
 
-            if (inputs_data[token_offset] == pad_token)
+            if (inputs_data[token_offset] == pad_token_id)
                 continue;
 
             if (pad_tokens_number == 0)
@@ -39,7 +39,66 @@ std::pair<ov::Tensor, ov::Tensor> pad_left(ov::Tensor&& input_ids, ov::Tensor&& 
     return {input_ids, attention_mask};
 }
 
+#ifdef _WIN32
+#    include <windows.h>
+#    define MAX_ABS_PATH _MAX_PATH
+#    define get_absolute_path(result, path) _fullpath(result, path.c_str(), MAX_ABS_PATH)
+#else
+#    include <dlfcn.h>
+#    include <limits.h>
+#    define MAX_ABS_PATH PATH_MAX
+#    define get_absolute_path(result, path) realpath(path.c_str(), result)
+
+std::string get_absolute_file_path(const std::string& path) {
+    std::string absolutePath;
+    absolutePath.resize(MAX_ABS_PATH);
+    std::ignore = get_absolute_path(&absolutePath[0], path);
+    if (!absolutePath.empty()) {
+        // on Linux if file does not exist or no access, function will return NULL, but
+        // `absolutePath` will contain resolved path
+        absolutePath.resize(absolutePath.find('\0'));
+        return std::string(absolutePath);
+    }
+    std::stringstream ss;
+    ss << "Can't get absolute file path for [" << path << "], err = " << strerror(errno);
+    throw std::runtime_error(ss.str());
 }
+#endif
+
+std::string get_ov_genai_library_path() {
+    #ifdef _WIN32
+        CHAR genai_library_path[MAX_PATH];
+        HMODULE hm = NULL;
+        if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                reinterpret_cast<LPSTR>(get_ov_genai_library_path),
+                                &hm)) {
+            std::stringstream ss;
+            ss << "GetModuleHandle returned " << GetLastError();
+            throw std::runtime_error(ss.str());
+        }
+        GetModuleFileNameA(hm, (LPSTR)genai_library_path, sizeof(genai_library_path));
+        return std::string(genai_library_path);
+    #elif defined(__APPLE__) || defined(__linux__) || defined(__EMSCRIPTEN__)
+        Dl_info info;
+        dladdr(reinterpret_cast<void*>(get_ov_genai_library_path), &info);
+        return get_absolute_file_path(info.dli_fname).c_str();
+    #else
+    #    error "Unsupported OS"
+    #endif  // _WIN32
+}
+
+std::filesystem::path with_openvino_tokenizers(const std::filesystem::path& path) {
+    #ifdef _WIN32
+        constexpr char tokenizers[] = "openvino_tokenizers.dll";
+    #elif __linux__
+        constexpr char tokenizers[] = "libopenvino_tokenizers.so";
+    #elif __APPLE__
+        constexpr char tokenizers[] = "libopenvino_tokenizers.dylib";
+    #endif
+        return path.parent_path() / tokenizers;
+}
+
+}  // namespace
 
 namespace ov {
 namespace genai {
@@ -53,13 +112,19 @@ public:
     int64_t m_eos_token_id = 2;
 
     TokenizerImpl() = default;
-    TokenizerImpl(std::string tokenizers_path, const std::string device, const std::string& ov_tokenizers_path) {
+    TokenizerImpl(std::string tokenizers_path, const std::string device) {
         ov::Core core;
         
         if (ov::genai::utils::is_xml(tokenizers_path))
             OPENVINO_THROW("tokenizers_path should be a path to a dir not a xml file");
-    
-        core.add_extension(ov_tokenizers_path);
+
+        const char* ov_tokenizers_path = getenv(ov::genai::utils::get_tokenizers_env_name());
+        if (ov_tokenizers_path) {
+            core.add_extension(ov_tokenizers_path);
+        } else {
+            OPENVINO_THROW("openvino_tokenizers path is not set");
+        }
+
         std::shared_ptr<ov::Model> tokenizer_model, detokenizer_model;
         try {
             tokenizer_model = core.read_model(tokenizers_path + "/openvino_tokenizer.xml");
@@ -80,14 +145,14 @@ public:
             m_pad_token_id = rt_info["pad_token_id"].as<int64_t>();
         }
 
-    std::pair<ov::Tensor, ov::Tensor> encode(std::string prompt) {
+    TokenizedInputs encode(std::string prompt) {
         size_t batch_size = 1;
         m_tokenize_request.set_input_tensor(ov::Tensor{ov::element::string, {batch_size}, &prompt});
         m_tokenize_request.infer();
         return {m_tokenize_request.get_tensor("input_ids"), m_tokenize_request.get_tensor("attention_mask")};
     }
 
-    std::pair<ov::Tensor, ov::Tensor> encode(std::vector<std::string>& prompts) {
+    TokenizedInputs encode(std::vector<std::string>& prompts) {
         m_tokenize_request.set_input_tensor(ov::Tensor{ov::element::string, {prompts.size()}, prompts.data()});
         auto size_ = m_tokenize_request.get_input_tensor().get_shape();
         m_tokenize_request.infer();
@@ -139,23 +204,24 @@ public:
     }
 };
 
-Tokenizer::Tokenizer(const std::string& tokenizers_path, const std::string& device, const std::string& ov_tokenizers_path) {
-    m_pimpl = std::make_shared<TokenizerImpl>(tokenizers_path, device, ov_tokenizers_path);
+Tokenizer::Tokenizer(const std::string& tokenizers_path, const std::string& device) {
+    ov::genai::utils::GenAIEnvManager env_manager(with_openvino_tokenizers(get_ov_genai_library_path()).string());
+    m_pimpl = std::make_shared<TokenizerImpl>(tokenizers_path, device);
 }
 
-std::pair<ov::Tensor, ov::Tensor> Tokenizer::encode(const std::string prompt) {
+TokenizedInputs Tokenizer::encode(const std::string prompt) {
     return m_pimpl->encode(std::move(prompt));
 }
 
-std::pair<ov::Tensor, ov::Tensor> Tokenizer::encode(std::vector<std::string>& prompts) {
+TokenizedInputs Tokenizer::encode(std::vector<std::string>& prompts) {
     return m_pimpl->encode(prompts);
 }
 
-std::pair<ov::Tensor, ov::Tensor> Tokenizer::encode(std::vector<std::string>&& prompts) {
+TokenizedInputs Tokenizer::encode(std::vector<std::string>&& prompts) {
     return m_pimpl->encode(prompts);
 }
 
-std::pair<ov::Tensor, ov::Tensor> Tokenizer::encode(std::initializer_list<std::string>& text) {
+TokenizedInputs Tokenizer::encode(std::initializer_list<std::string>& text) {
     return encode(std::vector<std::string>(text.begin(), text.end()));
 }
 

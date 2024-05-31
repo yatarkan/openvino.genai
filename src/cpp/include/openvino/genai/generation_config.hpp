@@ -16,11 +16,11 @@ namespace genai {
 
 /**
  * @brief controls the stopping condition for grouped beam search. The following values are possible:
- *        "early" stops as soon as there are `num_beams` complete candidates.
-          "heuristic" stops when is it unlikely to find better candidates.
-          "never" stops when there cannot be better candidates.
+ *        "EARLY" stops as soon as there are `num_beams` complete candidates.
+          "HEURISTIC" stops when is it unlikely to find better candidates.
+          "NEVER" stops when there cannot be better candidates.
  */
-enum class StopCriteria { early, heuristic, never };
+enum class StopCriteria { EARLY, HEURISTIC, NEVER };
 
 /**
  * @brief Structure to keep generation config parameters. For a selected method of decoding, only parameters from that group
@@ -50,9 +50,9 @@ enum class StopCriteria { early, heuristic, never };
  * @param num_return_sequences the number of sequences to return for grouped beam search decoding.
  * @param no_repeat_ngram_size if set to int > 0, all ngrams of that size can only occur once.
  * @param stop_criteria controls the stopping condition for grouped beam search. It accepts the following values: 
- *        "early", where the generation stops as soon as there are `num_beams` complete candidates; "heuristic", where an 
- *        heuristic is applied and the generation stops when is it very unlikely to find better candidates;
- *        "never", where the beam search procedure only stops when there cannot be better candidates (canonical beam search algorithm).
+ *        "EARLY", where the generation stops as soon as there are `num_beams` complete candidates; "HEURISTIC", where an 
+ *        "HEURISTIC" is applied and the generation stops when is it very unlikely to find better candidates;
+ *        "NEVER", where the beam search procedure only stops when there cannot be better candidates (canonical beam search algorithm).
  * 
  * Random sampling parameters:
  * @param temperature the value used to modulate token probabilities for random sampling.
@@ -78,7 +78,7 @@ public:
     float length_penalty = 1.0f;
     size_t num_return_sequences = 1;
     size_t no_repeat_ngram_size = std::numeric_limits<size_t>::max();
-    StopCriteria stop_criteria = StopCriteria::heuristic;
+    StopCriteria stop_criteria = StopCriteria::HEURISTIC;
     
     // Multinomial
     float temperature = 1.0f;
@@ -100,8 +100,39 @@ public:
     bool is_greedy_decoding() const;
     bool is_beam_search() const;
     bool is_multinomial() const;
-    static GenerationConfig anymap_to_generation_config(const ov::AnyMap& config_map = {});
+    void update_generation_config(const ov::AnyMap& config_map = {});
 };
+
+/*
+ * utils that allow to use generate and operator() in the following way:
+ * pipe.generate(input_ids, ov::max_new_tokens(200), ov::temperature(1.0f),...)
+ * pipe(text, ov::max_new_tokens(200), ov::temperature(1.0f),...)
+*/
+static constexpr ov::Property<size_t> max_new_tokens{"max_new_tokens"};
+static constexpr ov::Property<size_t> max_length{"max_length"};
+static constexpr ov::Property<bool> ignore_eos{"ignore_eos"};
+
+static constexpr ov::Property<size_t> num_beam_groups{"num_beam_groups"};
+static constexpr ov::Property<size_t> num_beams{"num_beams"};
+static constexpr ov::Property<float> diversity_penalty{"diversity_penalty"};
+static constexpr ov::Property<float> length_penalty{"length_penalty"};
+static constexpr ov::Property<size_t> num_return_sequences{"num_return_sequences"};
+static constexpr ov::Property<size_t> no_repeat_ngram_size{"no_repeat_ngram_size"};
+static constexpr ov::Property<StopCriteria> stop_criteria{"stop_criteria"};
+
+static constexpr ov::Property<float> temperature{"temperature"};
+static constexpr ov::Property<float> top_p{"top_p"};
+static constexpr ov::Property<int> top_k{"top_k"};
+static constexpr ov::Property<bool> do_sample{"do_sample"};
+static constexpr ov::Property<float> repetition_penalty{"repetition_penalty"};
+
+
+static constexpr ov::Property<int64_t> pad_token_id{"pad_token_id"};
+static constexpr ov::Property<int64_t> bos_token_id{"bos_token_id"};
+static constexpr ov::Property<int64_t> eos_token_id{"eos_token_id"};
+    
+static constexpr ov::Property<std::string> bos_token{"bos_token"};
+static constexpr ov::Property<std::string> eos_token{"eos_token"};
 
 }  // namespace genai
 }  // namespace ov

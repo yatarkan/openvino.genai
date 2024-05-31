@@ -9,7 +9,6 @@
 #include <regex>
 #include <vector>
 
-#include "generation_config_helper.hpp"
 #include "openvino/genai/llm_pipeline.hpp"
 #include "utils.hpp"
 
@@ -213,8 +212,8 @@ ov::genai::EncodedResults multinominal_decoding(ov::InferRequest& m_model_runner
     results.tokens[0].push_back(out_token.id);
     results.scores[0] += out_token.score;
 
-    if (streamer) {
-        streamer->put(out_token.id);
+    if (streamer && streamer->put(out_token.id)) {
+        return results;
     }
 
     if (!config.ignore_eos && out_token.id == config.eos_token_id) {
@@ -243,10 +242,10 @@ ov::genai::EncodedResults multinominal_decoding(ov::InferRequest& m_model_runner
         results.tokens[0].push_back(out_token.id);
         results.scores[0] += out_token.score;
 
-        if (streamer) {
-            streamer->put(out_token.id);
+        if (streamer && streamer->put(out_token.id)) {
+            return results;
         }
-
+    
         if (!config.ignore_eos && out_token.id == config.eos_token_id) {
             break;
         }
