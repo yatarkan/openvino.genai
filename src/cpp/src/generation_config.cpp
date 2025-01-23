@@ -104,8 +104,7 @@ void GenerationConfig::set_eos_token_id(size_t tokenizer_eos_token_id) {
             tokenizer_eos_token_id, ")");
     }
     // Merge user defined stop tokens with model EOS token
-    if (stop_token_ids.find(eos_token_id) == stop_token_ids.end())
-        stop_token_ids.insert(eos_token_id);
+    stop_token_ids.insert(eos_token_id);
 }
 
 void GenerationConfig::update_generation_config(const ov::AnyMap& properties) {
